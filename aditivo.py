@@ -7,7 +7,7 @@ import openpyxl
 from datetime import datetime
 
 # Função para salvar os dados no Excel
-def salvar_excel(nome_cliente, mensalidade_atual, nova_mensalidade_50, nova_mensalidade_100, nova_mensalidade_150, proposta_aprovada):
+def salvar_excel(nome_cliente, mensalidade_atual, nova_mensalidade, proposta_aprovada, lucro):
     try:
         # Abrir ou criar o arquivo Excel
         try:
@@ -16,7 +16,7 @@ def salvar_excel(nome_cliente, mensalidade_atual, nova_mensalidade_50, nova_mens
             workbook = openpyxl.Workbook()
             sheet = workbook.active
             # Criar cabeçalhos
-            sheet.append(["Data", "Nome do Cliente", "Mensalidade Atual", "Nova Mensalidade (50 CNPJs)", "Nova Mensalidade (100 CNPJs)", "Nova Mensalidade (150 CNPJs)", "Proposta Aprovada"])
+            sheet.append(["Data", "Nome do Cliente", "Mensalidade Atual", "Nova Mensalidade", "Proposta Aprovada", "Lucro"])
         else:
             sheet = workbook.active
         
@@ -25,10 +25,9 @@ def salvar_excel(nome_cliente, mensalidade_atual, nova_mensalidade_50, nova_mens
             datetime.now().strftime("%d/%m/%Y"),
             nome_cliente,
             f"R$ {mensalidade_atual:.2f}",
-            f"R$ {nova_mensalidade_50:.2f}",
-            f"R$ {nova_mensalidade_100:.2f}",
-            f"R$ {nova_mensalidade_150:.2f}",
-            proposta_aprovada
+            f"R$ {nova_mensalidade:.2f}",
+            proposta_aprovada,
+            f"R$ {lucro:.2f}"
         ])
         
         # Salvar o arquivo Excel
@@ -47,39 +46,34 @@ def calcular_aditivo():
         # Verificar se o cliente terá desconto
         desconto_aplicado = var_desconto.get() == 1  # 1 é "Sim", 0 é "Não"
 
-        # Pacote de 50 CNPJs adicionais
-        total_cnpjs_50 = cnpjs_atual + 50
-        custo_adicional_50 = 50 * valor_aditivo
-        nova_mensalidade_50 = mensalidade_cliente + custo_adicional_50
+        # Pacotes de CNPJs adicionais
+        pacotes = {
+            "50": {"quantidade": 50, "desconto": 0},
+            "100": {"quantidade": 100, "desconto": 0.10 if desconto_aplicado else 0},
+            "150": {"quantidade": 150, "desconto": 0.20 if desconto_aplicado else 0},
+        }
 
-        # Pacote de 100 CNPJs adicionais
-        valor_aditivo_100 = valor_aditivo - 0.10 if desconto_aplicado else valor_aditivo
-        total_cnpjs_100 = cnpjs_atual + 100
-        custo_adicional_100 = 100 * valor_aditivo_100
-        nova_mensalidade_100 = mensalidade_cliente + custo_adicional_100
+        # Calcular novas mensalidades
+        for pacote, dados in pacotes.items():
+            total_cnpjs = cnpjs_atual + dados["quantidade"]
+            valor_aditivo_pacote = valor_aditivo - dados["desconto"]
+            custo_adicional = dados["quantidade"] * valor_aditivo_pacote
+            nova_mensalidade = mensalidade_cliente + custo_adicional
+            dados.update({
+                "total_cnpjs": total_cnpjs,
+                "valor_aditivo": valor_aditivo_pacote,
+                "custo_adicional": custo_adicional,
+                "nova_mensalidade": nova_mensalidade
+            })
 
-        # Pacote de 150 CNPJs adicionais
-        valor_aditivo_150 = valor_aditivo - 0.20 if desconto_aplicado else valor_aditivo
-        total_cnpjs_150 = cnpjs_atual + 150
-        custo_adicional_150 = 150 * valor_aditivo_150
-        nova_mensalidade_150 = mensalidade_cliente + custo_adicional_150
-
-        resultado = f"""
-        Pacote de 50 CNPJs adicionais:
-        Total de CNPJs: {cnpjs_atual} + 50 = {total_cnpjs_50}
-        Custo Adicional: 50 CNPJs = R${custo_adicional_50:.2f}
-        Nova Mensalidade: R${mensalidade_cliente:.2f} + R${custo_adicional_50:.2f} = R${nova_mensalidade_50:.2f}
-
-        Pacote de 100 CNPJs adicionais:
-        Total de CNPJs: {cnpjs_atual} + 100 = {total_cnpjs_100}
-        Custo Adicional: 100 CNPJs = R${custo_adicional_100:.2f}
-        Nova Mensalidade: R${mensalidade_cliente:.2f} + R${custo_adicional_100:.2f} = R${nova_mensalidade_100:.2f}
-
-        Pacote de 150 CNPJs adicionais:
-        Total de CNPJs: {cnpjs_atual} + 150 = {total_cnpjs_150}
-        Custo Adicional: 150 CNPJs = R${custo_adicional_150:.2f}
-        Nova Mensalidade: R${mensalidade_cliente:.2f} + R${custo_adicional_150:.2f} = R${nova_mensalidade_150:.2f}
-        """
+        # Exibir resultados
+        resultado = "\n\n".join([
+            f"Pacote de {pacote} CNPJs adicionais:\n"
+            f"Total de CNPJs: {cnpjs_atual} + {dados['quantidade']} = {dados['total_cnpjs']}\n"
+            f"Custo Adicional: {dados['quantidade']} CNPJs = R${dados['custo_adicional']:.2f}\n"
+            f"Nova Mensalidade: R${mensalidade_cliente:.2f} + R${dados['custo_adicional']:.2f} = R${dados['nova_mensalidade']:.2f}"
+            for pacote, dados in pacotes.items()
+        ])
         messagebox.showinfo("Resultado", resultado)
 
         # Pergunta se o cliente aprovou a proposta
@@ -88,12 +82,10 @@ def calcular_aditivo():
             # Nova janela para escolher qual proposta o cliente aprovou
             def escolher_proposta():
                 opcao_aprovada = var_proposta.get()
-                if opcao_aprovada == "50":
-                    salvar_excel(nome_cliente, mensalidade_cliente, nova_mensalidade_50, 0, 0, "50 CNPJs")
-                elif opcao_aprovada == "100":
-                    salvar_excel(nome_cliente, mensalidade_cliente, nova_mensalidade_50, nova_mensalidade_100, 0, "100 CNPJs")
-                elif opcao_aprovada == "150":
-                    salvar_excel(nome_cliente, mensalidade_cliente, nova_mensalidade_50, nova_mensalidade_100, nova_mensalidade_150, "150 CNPJs")
+                if opcao_aprovada in pacotes:
+                    dados = pacotes[opcao_aprovada]
+                    lucro = dados['nova_mensalidade'] - mensalidade_cliente
+                    salvar_excel(nome_cliente, mensalidade_cliente, dados['nova_mensalidade'], f"{opcao_aprovada} CNPJs", lucro)
                 janela_proposta.destroy()  # Fechar janela após salvar
 
             # Criar janela para seleção de proposta
@@ -104,9 +96,8 @@ def calcular_aditivo():
             var_proposta = tk.StringVar(value="50")  # Valor padrão
 
             tk.Label(janela_proposta, text="Selecione a proposta aprovada:").pack(pady=10)
-            tk.Radiobutton(janela_proposta, text="50 CNPJs", variable=var_proposta, value="50").pack()
-            tk.Radiobutton(janela_proposta, text="100 CNPJs", variable=var_proposta, value="100").pack()
-            tk.Radiobutton(janela_proposta, text="150 CNPJs", variable=var_proposta, value="150").pack()
+            for pacote in pacotes:
+                tk.Radiobutton(janela_proposta, text=f"{pacote} CNPJs", variable=var_proposta, value=pacote).pack()
 
             tk.Button(janela_proposta, text="Confirmar", command=escolher_proposta).pack(pady=10)
 
@@ -139,12 +130,11 @@ img_label.grid(row=0, column=0, columnspan=2)
 titulo_label = tk.Label(root, text="Cálculo de Aditivo", font=("Arial", 16), fg="white", bg="#2c3e50")  # Letras brancas
 titulo_label.grid(row=1, column=0, columnspan=2)
 
-# Campo de nome do cliente
+# Labels e inputs
 tk.Label(root, text="Nome do Cliente:", fg="white", bg="#2c3e50").grid(row=2, column=0)
 entry_nome_cliente = tk.Entry(root)
 entry_nome_cliente.grid(row=2, column=1)
 
-# Labels e inputs
 tk.Label(root, text="Quantidade atual de CNPJs:", fg="white", bg="#2c3e50").grid(row=3, column=0)
 entry_cnpjs_atual = tk.Entry(root)
 entry_cnpjs_atual.grid(row=3, column=1)
